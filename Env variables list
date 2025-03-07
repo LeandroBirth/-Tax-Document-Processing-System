@@ -1,0 +1,12 @@
+SUPABASE_URL=https://your-supabase-instance.supabase.co
+SMTP_ACCOUNT=your-smtp-account
+SMTP_ACCOUNT_ID=your-smtp-account-id
+AWS_ACCOUNT=your-aws-account
+AWS_ACCOUNT_ID=your-aws-account-id
+OPENAI_ACCOUNT=your-openai-account
+OPENAI_ACCOUNT_ID=your-openai-account-id
+IMAP_ACCOUNT=your-imap-account
+IMAP_ACCOUNT_ID=your-imap-account-id
+GOOGLE_DRIVE_ACCOUNT=your-google-drive-account
+GOOGLE_DRIVE_ACCOUNT_ID=your-google-drive-account-id
+INSTANCE_ID=your-instance-id
