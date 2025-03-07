@@ -1,0 +1,627 @@
+{
+  "name": "First task (with env variables)",
+  "nodes": [
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/document-similarity-search' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2760,
+        1300
+      ],
+      "id": "60b8e16a-65da-4978-927e-4b01cf344bf4",
+      "name": "Document Similarity Search",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ process.env.EMAIL_FROM }}",
+        "toEmail": "={{ process.env.EMAIL_TO }}",
+        "subject": "Critical Failure in Tax Processing Workflow",
+        "text": "A critical error occurred in the workflow. Please check logs for details.",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        1620
+      ],
+      "id": "04bf9973-4702-4f04-9a2c-552b944bbcb2",
+      "name": "Error Alert",
+      "retryOnFail": true,
+      "webhookId": "615c3e4f-ac0e-4330-b8f6-5c06d18a285f",
+      "credentials": {
+        "smtp": {
+          "id": "env:SMTP_ACCOUNT_ID",
+          "name": "env:SMTP_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Initialize a variable to store the concatenated text\nlet text = \"\";\n\n// Check if items is defined and is an array\nif (Array.isArray(items)) {\n    // Loop through all items (blocks) from AWS Textract\n    for (const item of items) {\n        // Check if the block is a LINE and has Text\n        if (item.json && item.json.BlockType === \"LINE\" && item.json.Text) {\n            // Replace escaped newlines with actual newlines\n            const cleanedText = item.json.Text.replace(/\\\\n/g, '\\n');\n            text += cleanedText + '\\n';\n        }\n    }\n}\n\n// Return the extracted text as a single object\nreturn {\n    json: {\n        text: text.trim()\n    }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        1300
+      ],
+      "id": "97917dea-e01e-4147-b301-95fd72de668e",
+      "name": "Preprocess Text1",
+      "alwaysOutputData": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize an array to store file details\nlet fileData = [];\n\n// Loop through all binary attachments\nfor (const key in items[0].binary) {\n    if (key.startsWith('attachment_')) {\n        const binaryData = items[0].binary[key];\n\n        // Check allowed file types\n        if (binaryData.mimeType.includes('jpeg') || \n            binaryData.mimeType.includes('jpg') || \n            binaryData.mimeType.includes('pdf')) {\n\n            // Store binary key, file name, and binary data\n            fileData.push({\n                json: {\n                    binaryKey: key,\n                    fileName: binaryData.fileName || `${key}.bin`\n                },\n                binary: {\n                    [key]: binaryData\n                }\n            });\n        }\n    }\n}\n\n// Return file data for the next node\nreturn fileData;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1300
+      ],
+      "id": "4dfee3f2-ff33-4255-96cf-9c89e317795a",
+      "name": "Extract attachment",
+      "alwaysOutputData": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "analyzeDocument",
+        "binaryPropertyName": "attachment_0"
+      },
+      "type": "n8n-nodes-base.awsTextract",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        1300
+      ],
+      "id": "12d5e7a7-564c-4440-a535-49a01b1989c6",
+      "name": "AWS Textract",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "credentials": {
+        "aws": {
+          "id": "env:AWS_ACCOUNT_ID",
+          "name": "env:AWS_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-3.5-TURBO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "Classify the following document text into one of these types: W-2, 1099, Business Invoice, or Unknown.\n\nDocument Text: {{$node[\"Preprocess Text1\"].json[\"text\"]}}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        2220,
+        1300
+      ],
+      "id": "a86a4814-5ff3-411b-b6a5-b4a34b974c59",
+      "name": "OpenAI",
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "env:OPENAI_ACCOUNT_ID",
+          "name": "env:OPENAI_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-3.5-TURBO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extract the following financial entities from the text: SSNs, tax IDs, and income figures.\nText: {{$node[\"OpenAI Speech-to-Text\"].json[\"transcription\"]}}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1720,
+        1520
+      ],
+      "id": "86b15331-8e0c-4e71-9584-4b0ed3b2cd46",
+      "name": "OpenAI4",
+      "credentials": {
+        "openAiApi": {
+          "id": "env:OPENAI_ACCOUNT_ID",
+          "name": "env:OPENAI_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-3.5-turbo",
+          "mode": "list",
+          "cachedResultName": "GPT-3.5-TURBO"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Extract the following financial entities from the text: SSNs, tax IDs, and income figures.\nText: {{$node[\"Extract text1\"].json[\"text\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1720,
+        1760
+      ],
+      "id": "5f9f20a5-981d-40dd-b4c6-c561df8b8b3d",
+      "name": "OpenAI5",
+      "notesInFlow": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "env:OPENAI_ACCOUNT_ID",
+          "name": "env:OPENAI_ACCOUNT"
+        }
+      },
+      "notes": "extract financial entities"
+    },
+    {
+      "parameters": {
+        "mailbox": "inbox",
+        "postProcessAction": "nothing",
+        "downloadAttachments": true,
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]"
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        1300
+      ],
+      "id": "6a358a18-5247-4e95-a017-9de05c118d89",
+      "name": "Email Trigger - Document1",
+      "connections": {
+        "main": [
+          [
+            {
+              "node": "Extract attachment",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "credentials": {
+        "imap": {
+          "id": "env:IMAP_ACCOUNT_ID",
+          "name": "env:IMAP_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "13OKxAes0RCV-fUeZUPFNysM_swU2gDDw",
+          "mode": "list",
+          "cachedResultName": "Training",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/13OKxAes0RCV-fUeZUPFNysM_swU2gDDw"
+        },
+        "event": "fileCreated",
+        "options": {
+          "fileType": "all"
+        }
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        1520
+      ],
+      "id": "059a2191-02c1-4ab9-89ee-8ec9f83a72e3",
+      "name": "Google Drive Trigger - Audio1",
+      "notesInFlow": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "env:GOOGLE_DRIVE_ACCOUNT_ID",
+          "name": "env:GOOGLE_DRIVE_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mailbox": "inbox",
+        "postProcessAction": "nothing",
+        "downloadAttachments": true,
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\", \"SUBJECT\", \"Tax Information\"]"
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        1760
+      ],
+      "id": "1f577b10-513b-4be6-b586-dcb86c2a697b",
+      "name": "Email Trigger - Text1",
+      "connections": {
+        "main": [
+          [
+            {
+              "node": "Extract text1",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "credentials": {
+        "imap": {
+          "id": "env:IMAP_ACCOUNT_ID",
+          "name": "env:IMAP_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize variables to store text\nlet emailBody = \"\";\nlet attachmentText = \"\";\n\n// Extract email body\nif (items[0].json.body) {\n    emailBody = items[0].json.body;\n}\n\n// Extract text from attachments (if any)\nif (items[0].binary) {\n    for (const key in items[0].binary) {\n        if (key.startsWith(\"attachment_\")) {\n            const binaryData = items[0].binary[key];\n            attachmentText += binaryData.data.toString(\"utf8\") + \"\\n\";\n        }\n    }\n}\n\n// Combine email body and attachment text\nconst fullText = emailBody + \"\\n\" + attachmentText;\n\n// Return the extracted text\nreturn [{\n    json: {\n        text: fullText.trim()\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        1760
+      ],
+      "id": "43702ace-228f-45b3-91c1-5277afe86b49",
+      "name": "Extract text1",
+      "alwaysOutputData": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "audio",
+        "operation": "transcribe",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1560,
+        1520
+      ],
+      "id": "15ded3f7-d8a6-4107-b2d0-2442648059f6",
+      "name": "OpenAI - transcribe audio1",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "env:OPENAI_ACCOUNT_ID",
+          "name": "env:OPENAI_ACCOUNT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/validate-and-store-transcribed-audio' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        1520
+      ],
+      "id": "9ff18b95-9e0d-4033-a4fa-4ec84cee6603",
+      "name": "Supabase Audio1",
+      "notesInFlow": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/validate-and-store-text-tax-info' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        1760
+      ],
+      "id": "02c83373-cdf6-42cd-b26a-e589e16c65e2",
+      "name": "Supabase Text1",
+      "notesInFlow": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/validate-and-store-document-metadata' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2560,
+        1300
+      ],
+      "id": "dcb7e399-502f-4e89-960b-8e68b99fe5a9",
+      "name": "Supabase Doc1",
+      "notesInFlow": true,
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/document-similarity-search' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2760,
+        1520
+      ],
+      "id": "fefb8782-aea9-48b1-8b9c-2f261faa1d41",
+      "name": "Document Similarity Search1",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "={{ process.env.SUPABASE_URL + '/functions/v1/document-similarity-search' }}",
+        "jsonParameters": true,
+        "options": {},
+        "bodyParametersJson": "={{$json}}"
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        2760,
+        1760
+      ],
+      "id": "ee0916c3-12dc-44c1-80b5-e42a0d4997e7",
+      "name": "Document Similarity Search2",
+      "retryOnFail": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Preprocess Text1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract attachment": {
+      "main": [
+        [
+          {
+            "node": "AWS Textract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AWS Textract": {
+      "main": [
+        [
+          {
+            "node": "Preprocess Text1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Supabase Doc1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI4": {
+      "main": [
+        [
+          {
+            "node": "Supabase Audio1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI5": {
+      "main": [
+        [
+          {
+            "node": "Supabase Text1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Trigger - Document1": {
+      "main": [
+        [
+          {
+            "node": "Extract attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive Trigger - Audio1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI - transcribe audio1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Trigger - Text1": {
+      "main": [
+        [
+          {
+            "node": "Extract text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract text1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI - transcribe audio1": {
+      "main": [
+        [
+          {
+            "node": "OpenAI4",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Doc1": {
+      "main": [
+        [
+          {
+            "node": "Document Similarity Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Audio1": {
+      "main": [
+        [
+          {
+            "node": "Document Similarity Search1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Text1": {
+      "main": [
+        [
+          {
+            "node": "Document Similarity Search2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "16cdfccc-e668-44dc-a22c-01bac3b3f10c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "env:INSTANCE_ID"
+  },
+  "id": "c5JYREqEHWtjR8OE",
+  "tags": []
+}
