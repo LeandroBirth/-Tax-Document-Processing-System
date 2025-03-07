@@ -1,6 +1,6 @@
 # Tax Files Processing System
 
-This project is an automated tax document processing system built using [N8N](https://n8n.io/) for workflow automation, OpenAI, AWS, and [Supabase](https://supabase.com/) with Postgres for backend and database management. It integrates various technologies and APIs to process and analyze documents, audio, and text data related to tax processing.
+This project is an automated tax document processing system built using Python and Javascript, [N8N](https://n8n.io/) for workflow automation, OpenAI, AWS, and [Supabase](https://supabase.com/) with Postgres for backend and database management. It integrates various technologies and APIs to process and analyze documents, audio, and text data related to tax processing.
 
 Additionally, the system is designed to integrate with a **WeWeb-based client portal**, allowing clients to interact with their tax-related data in a secure and user-friendly environment.
 
